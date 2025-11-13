@@ -1,0 +1,4 @@
+requests
+urllib3
+pymysql          # opcional, sólo si vas a cargar CSV a MariaDB/RDS
+python-dotenv    # opcional, si usas un archivo .env
