@@ -14,6 +14,25 @@ El foco principal es:
 - Generar CSV en la carpeta temporal del sistema (`tempfile.gettempdir()`).
 
 ---
+## Entidades Soportadas
+
+Este pipeline está diseñado para extraer y transformar las siguientes entidades clave de SAP Business One:
+
+| Archivo Exportado (CSV) | Entidad SAP B1 (Objeto) | Descripción                                          |
+| :---------------------- | :---------------------- | :--------------------------------------------------- |
+| `OITM.csv`              | `Items`                 | Maestro de Artículos/Productos                       |
+| `OCRD.csv`              | `BusinessPartners`      | Maestro de Socios de Negocio (Clientes/Proveedores)  |
+| `OITB.csv`              | `ItemGroups`            | Grupos de Artículos                                  |
+| `OSLP.csv`              | `SalesPersons`          | Vendedores / Empleados de Ventas                     |
+| `OINV.csv`              | `Invoices`              | Encabezados de Facturas de Clientes                  |
+| `INV1.csv`              | `DocumentLines`         | Líneas de Detalle de las Facturas                    |
+| `ITEMPRICE_PL#.csv`     | `ItemPrices`            | Precios por Lista de Precios                         |
+| `sl_stock_por_bodega.csv` | `ItemWarehouseInfo`     | Stock detallado por Almacén/Bodega                   |
+| `sl_stock_totales.csv`  | `Items`                 | Stock total consolidado por Artículo                 |
+
+---
+
+---
 
 ## 1. Requisitos
 
