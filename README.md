@@ -30,7 +30,6 @@ Este pipeline está diseñado para extraer y transformar las siguientes entidade
 | `sl_stock_por_bodega.csv` | `ItemWarehouseInfo`     | Stock detallado por Almacén/Bodega                   |
 | `sl_stock_totales.csv`  | `Items`                 | Stock total consolidado por Artículo                 |
 
----
 
 ---
 
@@ -130,23 +129,17 @@ RDS_USER=dbuser
 RDS_PASS=********
 ```
 
+
 ---
+## 3. Arquitectura del Código y Helpers Clave
 
-## 3. Helpers comunes
+La lógica de extracción se basa en un conjunto de funciones auxiliares robustas diseñadas para la resiliencia y el rendimiento:
 
-En los fragmentos de código se utilizan varias funciones auxiliares compartidas, entre ellas:
-
-- `sl_login()` / `login()` — Crea una sesión autenticada contra el endpoint `/Login` del Service Layer.
-- `sl_fetch(session, entity, select=None, expand=None, where=None, pagesize=1000)` — Helper sencillo para descargar una entidad completa en una lista (con `$top`/`$skip`).
-- `req_get(session, url, timeout=120)` — `GET` con reintentos exponenciales en caso de errores `429/500/502/503/504`.
-- `stream_entity(session, entity, select=None, where=None, orderby=None)` — Generador que recorre todas las páginas de una entidad usando:
-  - `@odata.nextLink` (cuando el servidor lo expone).
-  - O, si no existe **nextLink**, avanzando el `$skip` según la cantidad real de filas devueltas.
-- `service_count(session, entity)` — Consulta `/Entity/$count` para saber cuántos registros se esperan, cuando el servicio lo soporta.
-- `save_csv(path, rows, headers)` — Helper genérico para escribir listas de diccionarios a CSV con encabezados definidos.
-- `odata_escape_literal(val)` y `fetch_item_price(...)` — Helpers para manejar literales OData y leer precios por `PriceList` desde `ItemPrices`.
-
-Estas funciones son la base de toda la lógica de **exportación masiva** (Items, BP, facturas, etc.).
+- **`login()`**: Establece una sesión autenticada contra el endpoint `/Login`, obteniendo y manteniendo la cookie `B1SESSION` para todas las operaciones subsecuentes.
+- **`req_get()`**: Una capa de peticiones `GET` con **reintentos automáticos y backoff exponencial** para errores transitorios del Service Layer (HTTP `429`, `5xx`), garantizando la estabilidad de extracciones largas.
+- **`stream_entity()`**: El motor de **paginación masiva**. Itera sobre todas las páginas de una entidad (ej. `Items`) siguiendo el `odata.nextLink` o gestionando el offset `$skip` manualmente, asegurando la obtención completa del dataset sin consumir memoria excesiva.
+- **`sl_fetch_invoice_lines()`**: Implementa una estrategia de **fallback triple** para la extracción de líneas de factura, garantizando la compatibilidad con diferentes versiones y configuraciones del Service Layer.
+- **`export_prices_csv()`**: Demuestra el uso de **multithreading** (`concurrent.futures`) para paralelizar las consultas y acelerar significativamente la recuperación de datos anidados como las listas de precios.
 
 ---
 
