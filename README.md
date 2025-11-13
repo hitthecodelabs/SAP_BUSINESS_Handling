@@ -397,6 +397,11 @@ Esa lógica de carga puede vivir en un módulo separado (por ejemplo, `load_to_r
 Con esta estructura, el repositorio documenta de forma clara **cómo se integran SAP Business One y Python usando el Service Layer**, y ofrece un **pipeline reproducible** para extraer **maestros**, **transacciones**, **precios** e **inventarios** en volúmenes grandes.
 
 ---
+## Sobre el Autor
+
+Desarrollado por **Jean Paul Panchana Espinoza**, Arquitecto de Soluciones Cloud y especialista en integración de sistemas. Conectemos en [LinkedIn](https://www.linkedin.com/in/jeanpaulpaes/).
+
+---
 ## 12. Licencia
 
 Este proyecto se distribuye bajo la licencia MIT. Ver el archivo `LICENSE` para más detalles.
