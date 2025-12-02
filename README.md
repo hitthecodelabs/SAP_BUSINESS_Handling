@@ -2,6 +2,201 @@
 
 Este repositorio contiene una serie de scripts en **Python** para extraer datos de **SAP Business One** a través del **Service Layer (OData)** y generar archivos **CSV** listos para ser consumidos por un POS, un *staging* en **MariaDB (AWS RDS)** u otros procesos analíticos.
 
+# Arquitectura del Sistema
+```mermaid
+flowchart TB
+    subgraph SAP["🏢 SAP BUSINESS ONE"]
+        SL["Service Layer<br/>(OData REST API)<br/>:50000/b1s/v1"]
+    end
+
+    subgraph AUTH["🔐 AUTENTICACIÓN"]
+        LOGIN["login()<br/>B1SESSION Cookie"]
+    end
+
+    subgraph HELPERS["⚙️ HELPERS & UTILIDADES"]
+        REQ["req_get()<br/>Reintentos + Backoff"]
+        STREAM["stream_entity()<br/>Paginación Masiva"]
+        COUNT["service_count()<br/>Conteo Total"]
+    end
+
+    subgraph EXTRACTORS["📦 EXTRACTORES DE DATOS"]
+        direction TB
+        subgraph MASTERS["Maestros"]
+            OITB["ItemGroups<br/>(OITB)"]
+            OITM["Items<br/>(OITM)"]
+            OSLP["SalesPersons<br/>(OSLP)"]
+            OCRD["BusinessPartners<br/>(OCRD)"]
+        end
+        subgraph TRANS["Transacciones"]
+            OINV["Invoices<br/>(OINV)"]
+            INV1["DocumentLines<br/>(INV1)"]
+        end
+        subgraph INVENTORY["Inventario & Precios"]
+            PRICES["ItemPrices<br/>(por PriceList)"]
+            STOCK["Stock por Bodega<br/>& Totales"]
+        end
+    end
+
+    subgraph OUTPUT["📁 SALIDA CSV"]
+        CSV1["OITB.csv"]
+        CSV2["OITM.csv"]
+        CSV3["OSLP.csv"]
+        CSV4["OCRD.csv"]
+        CSV5["OINV.csv"]
+        CSV6["INV1.csv"]
+        CSV7["ITEMPRICE_PL#.csv"]
+        CSV8["sl_stock_por_bodega.csv"]
+        CSV9["sl_stock_totales.csv"]
+    end
+
+    subgraph DESTINO["🎯 DESTINO FINAL (Opcional)"]
+        RDS[("MariaDB<br/>AWS RDS")]
+        POS["Sistema POS"]
+        BI["Reportes BI"]
+    end
+
+    SL <--> LOGIN
+    LOGIN --> REQ
+    REQ --> STREAM
+    REQ --> COUNT
+    
+    STREAM --> OITB & OITM & OSLP & OCRD
+    STREAM --> OINV & INV1
+    STREAM --> PRICES & STOCK
+
+    OITB --> CSV1
+    OITM --> CSV2
+    OSLP --> CSV3
+    OCRD --> CSV4
+    OINV --> CSV5
+    INV1 --> CSV6
+    PRICES --> CSV7
+    STOCK --> CSV8 & CSV9
+
+    CSV1 & CSV2 & CSV3 & CSV4 & CSV5 & CSV6 & CSV7 & CSV8 & CSV9 -.-> RDS
+    RDS -.-> POS & BI
+```
+
+# Flujo de Ejecución Detallado
+```mermaid
+sequenceDiagram
+    participant Script as 🐍 Python Script
+    participant SL as 🏢 Service Layer
+    participant FS as 📁 Sistema de Archivos
+    participant RDS as 🗄️ MariaDB RDS
+
+    Note over Script,SL: 1. Autenticación
+    Script->>SL: POST /Login (user, pass, company)
+    SL-->>Script: B1SESSION Cookie ✅
+
+    Note over Script,SL: 2. Extracción de Maestros
+    loop Para cada entidad (OITB, OITM, OSLP, OCRD)
+        Script->>SL: GET /Entity?$select=...&$top=1000
+        SL-->>Script: Página 1 + odata.nextLink
+        Script->>SL: GET nextLink (página 2, 3, ...)
+        SL-->>Script: Datos paginados
+        Script->>FS: Escribir {Entity}.csv
+    end
+
+    Note over Script,SL: 3. Extracción de Facturas
+    Script->>SL: GET /Invoices?$select=...
+    SL-->>Script: Encabezados OINV
+    Script->>FS: Escribir OINV.csv
+    
+    loop Para cada factura
+        Script->>SL: GET /Invoices({DocEntry})/DocumentLines
+        SL-->>Script: Líneas INV1
+    end
+    Script->>FS: Escribir INV1.csv
+
+    Note over Script,SL: 4. Extracción de Precios (Multithreading)
+    par Hilos paralelos (max_workers=16)
+        Script->>SL: GET /Items('CODE1')/ItemPrices
+        Script->>SL: GET /Items('CODE2')/ItemPrices
+        Script->>SL: GET /Items('CODE3')/ItemPrices
+    end
+    Script->>FS: Escribir ITEMPRICE_PL#.csv
+
+    Note over Script,SL: 5. Extracción de Stock
+    Script->>SL: GET /Items?$filter=InventoryItem eq 'tYES'
+    SL-->>Script: Items + ItemWarehouseInfoCollection
+    Script->>FS: Escribir sl_stock_por_bodega.csv
+    Script->>FS: Escribir sl_stock_totales.csv
+
+    Note over FS,RDS: 6. Carga a RDS (Opcional)
+    FS-->>RDS: LOAD DATA / INSERT (pymysql)
+```
+
+# Estructura de Entidades SAP B1
+```mermaid
+erDiagram
+    OITB ||--o{ OITM : "contiene"
+    OITM ||--o{ INV1 : "aparece en"
+    OINV ||--|{ INV1 : "tiene líneas"
+    OCRD ||--o{ OINV : "cliente"
+    OSLP ||--o{ OINV : "vendedor"
+    OITM ||--o{ ITEM_PRICES : "tiene precios"
+    OITM ||--o{ ITEM_WAREHOUSE : "stock por bodega"
+
+    OITB {
+        int ItmsGrpCod PK
+        string ItmsGrpNam
+    }
+
+    OITM {
+        string ItemCode PK
+        string ItemName
+        int ItmsGrpCod FK
+        date UpdateDate
+        date CreateDate
+    }
+
+    OCRD {
+        string CardCode PK
+        string CardName
+        string LicTradNum
+        string E_Mail
+        string Phone1
+    }
+
+    OSLP {
+        int SlpCode PK
+        string SlpName
+    }
+
+    OINV {
+        int DocEntry PK
+        int DocNum
+        string CardCode FK
+        int SlpCode FK
+        date DocDate
+        decimal DocTotal
+    }
+
+    INV1 {
+        int DocEntry FK
+        int LineNum
+        string ItemCode FK
+        string Dscription
+        decimal Quantity
+        decimal Price
+        decimal LineTotal
+    }
+
+    ITEM_PRICES {
+        string ItemCode FK
+        int PriceList
+        decimal Price
+        string Currency
+    }
+
+    ITEM_WAREHOUSE {
+        string ItemCode FK
+        string Warehouse
+        decimal InStock
+    }
+```
+
 El foco principal es:
 
 - Conectarse al Service Layer con sesión autenticada.
