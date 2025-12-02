@@ -2,7 +2,7 @@
 
 Este repositorio contiene una serie de scripts en **Python** para extraer datos de **SAP Business One** a través del **Service Layer (OData)** y generar archivos **CSV** listos para ser consumidos por un POS, un *staging* en **MariaDB (AWS RDS)** u otros procesos analíticos.
 
-# Arquitectura del Sistema
+## Arquitectura del Sistema
 ```mermaid
 flowchart TB
     subgraph SAP["🏢 SAP BUSINESS ONE"]
@@ -77,7 +77,7 @@ flowchart TB
     RDS -.-> POS & BI
 ```
 
-# Flujo de Ejecución Detallado
+## Flujo de Ejecución Detallado
 ```mermaid
 sequenceDiagram
     participant Script as 🐍 Python Script
@@ -127,7 +127,7 @@ sequenceDiagram
     FS-->>RDS: LOAD DATA / INSERT (pymysql)
 ```
 
-# Estructura de Entidades SAP B1
+## Estructura de Entidades SAP B1
 ```mermaid
 erDiagram
     OITB ||--o{ OITM : "contiene"
